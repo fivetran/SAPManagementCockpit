@@ -1,211 +1,170 @@
----
-name: sap-management-cockpit
-description: SAP Management Cockpit skill — the single-pane-of-glass landing page for the full Fivetran SAP estate. Use for: editing/extending the Management Cockpit page (`SAP_Management_Cockpit.html`), adding or removing a server card, wiring a new server into the reachability API, troubleshooting reachability false-reds, modifying the Service Monitor health check cron (`/usr/local/bin/sap_health_check.sh` on sapidesecc8), changing the JSON status payload (`health_status.json`), updating mailing lists (smtp2go-backed `SAPSpecialists` distribution), redeploying the static HTML, restarting the `gcs-explorer` service after backend changes, and any task that touches the cockpit's UI, reachability endpoints, monitoring agent, or email relay. NOT for individual cockpit pages (S/4HANA, ECC, SQ1, SAPRouter, HVR, SSH Tunnel) — those have their own skills.
-model: sonnet
----
+# SAP Management Cockpit
 
-# SAP Management Cockpit — Expert Context
+The **SAP Management Cockpit** is the single-pane-of-glass entry point for the entire Fivetran SAP demo estate. It is a static HTML dashboard hosted on `sapidesecc8` that shows the live reachability and service health of every SAP system, links to each system's individual cockpit page, and provides access to monitoring, email alerting, and administrative tools — all from one URL.
 
-You are an expert on the **SAP Management Cockpit**, the top-level dashboard that gives a single-pane-of-glass view of the entire Fivetran SAP landscape. Use this context for any task involving the cockpit's UI, reachability checks, the Service Monitor health-check cron, the smtp2go email relay, or deployment of the static HTML.
-
----
-
-## What the Management Cockpit is
-
-A **static HTML + JavaScript dashboard** served from `sapidesecc8`, accessible at:
+Any Sales Engineer working with the SAP demo environment starts here.
 
 ```
 https://sapidesecc8.fivetran-internal-sales.com/sap_skills/docs/SAP_Management_Cockpit.html
 ```
 
-It is the entry point for every other system cockpit (S/4HANA, ECC, SQ1, SAPRouter, HVR Hub, SSH Tunnel) and for monitoring + email-relay administration. The page itself is dumb — all "live" behaviour comes from JavaScript hitting backend APIs on `gcs_explorer_server.py`.
-
-| Property | Value |
-|---|---|
-| URL | `https://sapidesecc8.fivetran-internal-sales.com/sap_skills/docs/SAP_Management_Cockpit.html` |
-| Server | `sapidesecc8`, port 443 |
-| Filesystem path | `/usr/sap/sap_skills/docs/SAP_Management_Cockpit.html` |
-| Authoritative copy | Postgres `doc_pages` table (path `/sap_skills/docs/SAP_Management_Cockpit.html`) |
-| Theme | Teal (`#0d7377`) |
-| GitHub repo | [`fivetran/SAPManagementCockpit`](https://github.com/fivetran/SAPManagementCockpit) (PUBLIC) |
-| Backend service | `gcs-explorer.service` (`gcs_explorer_server.py`) on sapidesecc8 |
-
-**Two HTML files** in the cockpit family:
-- `SAP_Management_Cockpit.html` — the dashboard itself (server cards, status grid, links, monitoring tabs)
-- `SAP_Management_Cockpit_Documentation.html` — internal documentation page (this skill is the canonical source for it)
-
 ---
 
-## Reachability API
+## What's on the dashboard
 
-The cockpit performs automatic health checks on page load by calling a backend endpoint for each of 6 servers.
+### System status grid
 
-| Item | Value |
-|---|---|
-| Method | `GET` |
-| URL | `/sap_skills/api/reachability?system={system}` |
-| Auth | None |
-| Response | `{ "reachable": true | false }` |
-| Backend handler | `gcs_explorer_server.py` on sapidesecc8 |
+Six server cards, each with a live reachability indicator that updates on page load:
 
-**System identifiers** (the `system` query param maps to a fixed server + frontend element ID):
-
-| `system` param | Server checked | Status element ID |
+| Server card | System | What it links to |
 |---|---|---|
-| `s4hana` | sapidess4 | `reach-s4hana` |
-| `ecc8` | sapidesecc8 | `reach-ecc8` |
-| `sq1` | sap-sql-ides | `reach-sq1` |
-| `saprouter` | saprouter (34.46.174.105) | `reach-saprouter` |
-| `hvrhub` | saphvrhub | `reach-hvrhub` |
-| `sshtunnel` | ts-sap-hana-s4-ssh-tunnel (10.142.0.37) | `reach-sshtunnel` |
+| **S/4HANA 2023** | `sapidess4` — SAP S/4HANA SPS05 | S/4HANA cockpit + setup guide |
+| **ECC 6.0 EHP8** | `sapidesecc8` — SAP ECC on Oracle 19c | ECC cockpit + setup guide |
+| **ECC SQ1** | `sap-sql-ides` — SAP ECC on SQL Server 2012 | SQ1 cockpit + setup guide |
+| **SAPRouter** | `saprouter` (34.46.174.105) | SAPRouter cockpit + documentation |
+| **HVR Hub** | `saphvrhub` — HVR/HVA replication control plane | HVR Hub cockpit + documentation |
+| **SSH Tunnel** | `ts-sap-hana-s4-ssh-tunnel` (10.142.0.37) | SSH Tunnel guide |
 
-**Status indicators (UI):**
+Each card shows a colored dot — **green** (reachable), **red** (unreachable), or **gray** (check in flight) — updated automatically when the page loads via 6 parallel API calls to `/sap_skills/api/reachability?system={system}`.
 
-| Color | Meaning |
-|---|---|
-| Gray (`#ccc`) | Initial state — check in flight |
-| Green (`#27ae60`) | Server reachable |
-| Red (`#e74c3c`) | Server unreachable or check failed |
+### External links
 
-**Frontend flow**: `DOMContentLoaded` → `checkReachability(system, elementId)` is called 6 times in parallel → each call hits the backend handler.
+Two quick-access link cards are hardcoded into the page:
 
----
+**SAP links**: SAP Notes search (`me.sap.com`), Software Downloads Center, S/4HANA SSO login via Okta SAML.
 
-## External Links section
+**Fivetran links**: Fivetran Dashboard, HVR Hub Console (`saphvrhub:4340`), POV App, Slab.
 
-Two cards, hardcoded into the HTML:
+### Monitoring tabs
 
-**SAP Links**
-- SAP Notes: `me.sap.com/servicessupport/search/`
-- Software Downloads: `me.sap.com/softwarecenter`
-- S/4HANA SSO (Okta SAML): `https://fivetran.okta.com/home/sapnetweaversaml/0oa1sojot83IxLiyy1d8/59625` — S/4 internal IP `10.128.15.239`, public SSH `35.229.110.30`
-
-**Fivetran Links**
-- Fivetran Dashboard: `fivetran.com/dashboard/connections`
-- HVR Hub Console: `http://saphvrhub:4340/`
-- POV App: `pov-app.fivetran-internal-sales.com`
-- Slab: `fivetran.slab.com`
+The dashboard includes tabs that surface:
+- **Service Monitor** — per-service health across all 6 servers (see below)
+- **Monitoring Agent** — email distribution list management
 
 ---
 
-## Individual cockpit pages (linked from the dashboard)
+## How the reachability checks work
 
-Each server card on the Management Cockpit links to a per-system cockpit. **Don't edit those pages here** — they have their own skills:
+On page load, JavaScript calls the backend for each server in parallel:
 
-| Server | Cockpit HTML | Owning skill |
+```
+GET /sap_skills/api/reachability?system=s4hana
+→ { "reachable": true }
+```
+
+The backend (`gcs_explorer_server.py` on `sapidesecc8`) maps each `system` identifier to a probe appropriate for that server's stack:
+
+| `system` param | Server | Probe method |
 |---|---|---|
-| sapidess4 (S/4HANA) | `SAP_S4HANA_2023.html` + `_Guide.html` | `sap-skills-portal` (server doc) |
-| sapidesecc8 (ECC Oracle) | `SAP_ECC6_EHP8.html` + `_Guide.html` | `sap-skills-portal` |
-| sap-sql-ides (ECC SQL Server) | `SAP_ECC6_SQ1.html` + `_Guide.html` | `sq1-license` (license parts), `sap-skills-portal` (cockpit page) |
-| saprouter | `SAP_SAPRouter.html` + `SAP_SAPRouter_Documentation.html` | `saprouter` |
-| saphvrhub | `SAP_HVRHub.html` + `_Documentation.html` | (no dedicated skill yet) |
-| SSH Tunnel | `SAP_SSHTunnel.html` + `_Guide.html` | (no dedicated skill yet) |
-
-The Management Cockpit page itself only lists / links these — it doesn't own their content.
+| `s4hana` | `sapidess4` | SSH + `sapcontrol GetProcessList` |
+| `ecc8` | `sapidesecc8` | Local `sapcontrol` |
+| `sq1` | `sap-sql-ides` | SOAP `sapcontrol` port 50013 + WinRM |
+| `saprouter` | `saprouter` (34.46.174.105) | SSH + `systemctl is-active saprouter` |
+| `hvrhub` | `saphvrhub` | SSH + `systemctl is-active` |
+| `sshtunnel` | `ts-sap-hana-s4-ssh-tunnel` (10.142.0.37) | SSH |
 
 ---
 
 ## Service Monitor
 
-A real-time health dashboard embedded on `SAP_Monitoring.html` (linked from the Management Cockpit's Service Monitor tab). Driven by a cron-scheduled bash script.
+The **Service Monitor** tab shows fine-grained health — not just "is the server up?" but "is the SAP Dispatcher running? Is the Oracle DB process alive? Is the HVR Hub service active?" — updated every 5 minutes by a cron-driven bash script.
 
-| Component | Path | Purpose |
-|---|---|---|
-| Health-check script | `/usr/local/bin/sap_health_check.sh` on sapidesecc8 | Runs every 5 min via cron, probes all 6 servers + their key services |
-| JSON status output | `/usr/sap/sap_skills/health_status.json` | Single-snapshot status read by the web UI |
-| Append-only log | `/var/log/sap_health_check.log` | Last 2,000 lines retained |
-| Health-log API | `POST /sap_skills/api/admin/health_log` | Returns last 50 log entries (admin-only) |
-| Web UI | `SAP_Monitoring.html#service-monitor` | Auto-refreshing status cards |
+**How it works:**
 
-**Health-status.json is also synced to `doc_pages`** — that's why you see version numbers in the thousands on path `/sap_skills/health_status.json` (it's overwritten every 5 min by the cron writer).
+1. `/usr/local/bin/sap_health_check.sh` runs every 5 minutes on `sapidesecc8`
+2. It probes all 6 servers and writes a snapshot to `/usr/sap/sap_skills/health_status.json`
+3. The `SAP_Monitoring.html` page reads that JSON and renders status cards with green/red/gray dots
 
-### Services probed per server
+**Services probed per server:**
 
-| Server | Services | Check method |
-|---|---|---|
-| **sapidess4** | SAP Dispatcher / Gateway / ICM / IGS; HANA FIV; HANA PIT | `sapcontrol` via SSH (instance nrs 03, 00, 96) |
-| **sapidesecc8** | SAP Dispatcher / Gateway / ICM; Oracle DB; Web Server | local `sapcontrol`; `ora_pmon` process check; HTTPS curl |
-| **saprouter** | Server reachability; SAPRouter service | SSH; `systemctl is-active saprouter` |
-| **sap-sql-ides** | Server reachability; SAP Instance (SQ1); SQL Server DB | Ping; SOAP `sapcontrol` port 50013; WinRM via API |
-| **saphvrhub** | Server reachability; HVR Hub; PostgreSQL 14 | SSH; `systemctl is-active` for both |
-| **SSH Tunnel** | Server reachability | SSH to `10.142.0.37` |
+| Server | Services checked |
+|---|---|
+| `sapidess4` | SAP Dispatcher, Gateway, ICM, IGS; HANA tenant FIV; HANA tenant PIT |
+| `sapidesecc8` | SAP Dispatcher, Gateway, ICM; Oracle DB (`ora_pmon` process); Web Server (HTTPS curl) |
+| `saprouter` | Server reachability; `saprouter` systemd service |
+| `sap-sql-ides` | Server ping; SAP instance (SOAP port 50013); SQL Server DB (WinRM) |
+| `saphvrhub` | Server reachability; HVR Hub service; PostgreSQL 14 |
+| SSH Tunnel | Server reachability |
 
-### Status indicators (Service Monitor UI)
+**Status indicators:**
 
 | Indicator | Meaning |
 |---|---|
-| Green dot (`#27ae60`) | Service running |
-| Red dot (`#e74c3c`) | Service down or unreachable |
-| Gray dot (`#95a5a6`) | Initial / check in progress |
-| `REACHABLE` pill | Server responds to SSH / ping |
-| `UNREACHABLE` pill | Server did not respond within timeout |
+| Green dot | Service running |
+| Red dot | Service down or unreachable |
+| Gray dot | Check in progress or initial state |
+| `REACHABLE` pill | Server responded to SSH/ping |
+| `UNREACHABLE` pill | Server timed out |
+
+> `health_status.json` is also stored in the Postgres `doc_pages` table — that's why its version number is in the thousands (overwritten every 5 minutes by the cron).
 
 ---
 
-## Email Notifications / Monitoring Agent
+## Email monitoring and alerts
 
-The Management Cockpit's Monitoring Agent section manages email distribution lists. **All servers in the estate relay mail through smtp2go** via the verified `fivetran-internal-sales.com` domain.
+The **Monitoring Agent** section of the cockpit manages the mailing list for system alerts, certificate expiry warnings, and health notifications. All outbound mail from the SAP estate is relayed through **smtp2go** using the verified domain `fivetran-internal-sales.com`.
 
 | Property | Value |
 |---|---|
 | SMTP provider | smtp2go (`mail.smtp2go.com:2525`) |
-| Portal "From" | `sap-skills@fivetran-internal-sales.com` |
-| Verified domain | `fivetran-internal-sales.com` |
+| From address | `sap-skills@fivetran-internal-sales.com` |
+| Distribution list | `SAPSpecialists` → `antonio.carbone@fivetran.com`, `richard.brouwer@fivetran.com` |
 | Vault key | `smtp2go` |
 
-### Distribution lists
+**Email APIs** (all POST):
 
-| List | Recipients | Usage |
-|---|---|---|
-| `SAPSpecialists` | `antonio.carbone@fivetran.com`, `richard.brouwer@fivetran.com` | Alerts, notifications, reports |
-
-**Persistence**: lists were originally rewritten to disk via the HTML page; current authoritative copy is in `mailing_lists.json` (path `/sap_skills/mailing_lists.json` in `doc_pages`).
-
-### Email APIs
-
-| Endpoint | Method | Description |
-|---|---|---|
-| `/sap_skills/api/get_mailing_list` | POST | Read a list by name |
-| `/sap_skills/api/update_mailing_list` | POST | Update a list (rewrites HTML / `mailing_lists.json`) |
-| `/sap_skills/api/send_test_email` | POST | Send a test email to a list |
+| Endpoint | Purpose |
+|---|---|
+| `/sap_skills/api/get_mailing_list` | Read a list by name |
+| `/sap_skills/api/update_mailing_list` | Update a list (rewrites `mailing_lists.json`) |
+| `/sap_skills/api/send_test_email` | Send a test message to a list |
 
 ---
 
-## Deployment
+## Backend architecture
 
-The cockpit pages are **static HTML** served directly from disk by the `gcs-explorer` service. No restart required for HTML-only edits.
+The cockpit is a **static HTML + JavaScript** page — it has no server-side rendering. All dynamic behaviour comes from JavaScript calling backend APIs on `gcs_explorer_server.py`.
 
-### Deploy a cockpit HTML edit
+| Property | Value |
+|---|---|
+| URL | `https://sapidesecc8.fivetran-internal-sales.com/sap_skills/docs/SAP_Management_Cockpit.html` |
+| Hosting server | `sapidesecc8`, port 443 |
+| Filesystem path | `/usr/sap/sap_skills/docs/SAP_Management_Cockpit.html` |
+| Authoritative copy | Postgres `doc_pages` table, path `/sap_skills/docs/SAP_Management_Cockpit.html` |
+| Backend service | `gcs-explorer.service` (`gcs_explorer_server.py`) |
+| Theme colour | Teal (`#0d7377`) |
 
-The portal canonicalises content in Postgres `doc_pages` first, then serves from disk. The clean path is: **edit local → upsert into doc_pages → backup-then-copy to /usr/sap/sap_skills/docs/**. Never write directly to `/usr/sap/sap_skills/docs/` without the doc_pages upsert step (see `feedback_never_modify_production_before_github`).
+**Two HTML files** make up the cockpit:
+- `SAP_Management_Cockpit.html` — the live dashboard (server cards, status grid, monitoring tabs)
+- `SAP_Management_Cockpit_Documentation.html` — internal documentation page
+
+---
+
+## Deploying changes
+
+HTML-only edits take effect immediately — no restart needed. The portal canonicalises content through Postgres first:
 
 ```bash
-# 1. Edit local copy
+# 1. Edit locally
 vim ~/SAP_Skills/docs/SAP_Management_Cockpit.html
 
-# 2. Upsert into Postgres (sapidesecc8)
+# 2. Upsert into Postgres
 ssh sapidesecc8 "sudo -u postgres psql -d portal" <<EOF
 INSERT INTO doc_pages (path, content, content_type, sha256, version, updated_at, updated_by)
 VALUES ('/sap_skills/docs/SAP_Management_Cockpit.html',
-        pg_read_file('/tmp/cockpit.html'),
-        'text/html; charset=utf-8',
-        '$(sha256sum < /tmp/cockpit.html | cut -d' ' -f1)',
-        1, now(), 'antonio.carbone@fivetran.com')
+        pg_read_file('/tmp/cockpit.html'), 'text/html; charset=utf-8',
+        '$(sha256sum < /tmp/cockpit.html | cut -d' ' -f1)', 1, now(),
+        'antonio.carbone@fivetran.com')
 ON CONFLICT (path) DO UPDATE SET version = doc_pages.version + 1,
-                                 content = EXCLUDED.content,
-                                 sha256 = EXCLUDED.sha256,
-                                 updated_at = now();
+  content = EXCLUDED.content, sha256 = EXCLUDED.sha256, updated_at = now();
 EOF
 
-# 3. Sync to filesystem
-scp ~/SAP_Skills/docs/SAP_Management_Cockpit.html root@sapidesecc8:/usr/sap/sap_skills/docs/
+# 3. Copy to disk
+scp ~/SAP_Skills/docs/SAP_Management_Cockpit.html \
+    root@sapidesecc8:/usr/sap/sap_skills/docs/
 ```
 
-No `gcs-explorer` restart needed for HTML.
-
-### Restart required after backend edits
-
-If you modify `gcs_explorer_server.py` (e.g. to add a new reachability identifier or change the SOAP call to SQ1):
+After editing `gcs_explorer_server.py` (backend changes — e.g. new reachability probe):
 
 ```bash
 ssh sapidesecc8 'systemctl restart gcs-explorer'
@@ -213,46 +172,65 @@ ssh sapidesecc8 'systemctl restart gcs-explorer'
 
 ---
 
-## Adding a new server to the cockpit
+## Adding a new server
 
-Five-step recipe. The order matters — the UI will throw 404s if you ship the HTML before the backend handler.
+Five steps — order matters (the UI will 404 if HTML ships before the backend handler):
 
-1. **Create a per-server cockpit page** at `~/SAP_Skills/docs/SAP_NewServer.html` (model after one of the existing per-server HTMLs, e.g. `SAP_HVRHub.html`)
-2. **Add the server card** to `SAP_Management_Cockpit.html` inside the `.status-grid` div. Card includes a `<span id="reach-newserver">` for the status dot.
-3. **Add a reachability identifier** to `gcs_explorer_server.py` — extend the `system` → check function map. Choose a check method appropriate to the server (SSH+`systemctl`, ping, SOAP sapcontrol, SQL, HTTP probe, …).
-4. **Add the JS call** in the `DOMContentLoaded` handler:
+1. **Create a per-server cockpit page** at `~/SAP_Skills/docs/SAP_NewServer.html` (model after an existing one such as `SAP_HVRHub.html`)
+2. **Add a server card** to `SAP_Management_Cockpit.html` inside `.status-grid`, including `<span id="reach-newserver">` for the status dot
+3. **Add a reachability handler** in `gcs_explorer_server.py` — extend the `system` → probe function map with the appropriate check method for that server's stack
+4. **Add the JS call** in `DOMContentLoaded`:
    ```js
    checkReachability('newserver', 'reach-newserver');
    ```
-5. **Deploy** — upsert both HTMLs to `doc_pages` + scp to disk, then `systemctl restart gcs-explorer` (because step 3 changed the backend).
+5. **Deploy** — upsert both HTMLs into `doc_pages`, scp to disk, then `systemctl restart gcs-explorer`
 
-If the new server should also be in the **Service Monitor**, additionally:
-6. Extend `/usr/local/bin/sap_health_check.sh` with a probe block for the new server
-7. The script writes an extra key into `health_status.json` — make sure `SAP_Monitoring.html` reads + renders it
+To also add the server to the **Service Monitor**, additionally:
+- Extend `/usr/local/bin/sap_health_check.sh` with a probe block for the new server
+- Add a rendering section in `SAP_Monitoring.html` to display the new key from `health_status.json`
 
 ---
 
-## Common gotchas
+## Common issues
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| All status dots stay gray forever | `gcs-explorer` not running, or reachability handler crashing on every call | `systemctl status gcs-explorer`; tail journalctl for the service; if a single handler raises, **all** subsequent POST handlers in the same `do_POST` may break (see `feedback_portal_post_handlers_empty_reply`) |
-| One server shows red but is alive | Check method is wrong for that server's actual stack (e.g. ping doesn't work over GCP private IPs without a route, SOAP port closed by firewall) | Inspect the handler in `gcs_explorer_server.py`; switch SSH-based check to one that doesn't require key-auth from the portal user |
-| Edits to the HTML "don't appear" after scp | Browser cache or static-file ETag mismatch | Hard-reload (Cmd-Shift-R); verify `doc_pages.sha256` matches the file you scp'd |
-| sapcontrol checks return spurious red on sapidess4 | XSA / instance not started yet after a HANA restart | Wait 60–120 s after `HDB start`; also check `sapcontrol -nr 03 -function GetProcessList` directly |
-| SQ1 reachability flips green/red | WinRM session timeout race; SOAP port 50013 returns slowly under load | Increase the per-check timeout in `gcs_explorer_server.py`; SQ1 also has its own `Rotation#1` os-password drift to be aware of (see `sq1-license` skill) |
-| `health_status.json` has stale `last_update` timestamp | Cron not running, or `sap_health_check.sh` failed | `crontab -l` on sapidesecc8; `tail -50 /var/log/sap_health_check.log` |
-| Mailing-list edit doesn't show in cockpit UI | The `mailing_lists.json` was re-read but cached browser state shows old | Hard-reload; verify the JSON's `updated_at` advanced via doc_pages |
-| New server card pushes layout off-screen | `.status-grid` uses CSS grid with `auto-fit minmax(280px, 1fr)` — adding a 7th breaks the visual balance | Either rebalance with explicit `grid-template-columns`, or split into two grids |
+| All status dots stay gray | `gcs-explorer` not running, or reachability handler crashing | `systemctl status gcs-explorer`; check `journalctl -u gcs-explorer -n 50` |
+| One server shows red but is alive | Wrong probe method for that server's stack | Inspect the handler in `gcs_explorer_server.py`; switch to an SSH-based check |
+| HTML edits don't appear after scp | Browser cache or ETag mismatch | Hard-reload (`Cmd-Shift-R`); verify `doc_pages.sha256` matches the deployed file |
+| `sapcontrol` checks spuriously red on `sapidess4` | XSA / instance not started yet after HANA restart | Wait 60–120 s after `HDB start`; run `sapcontrol -nr 03 -function GetProcessList` manually |
+| SQ1 reachability flips green/red intermittently | WinRM timeout race; SOAP port 50013 slow under load | Increase per-check timeout in `gcs_explorer_server.py` |
+| `health_status.json` has stale `last_update` | Cron not running or `sap_health_check.sh` failing | `crontab -l` on `sapidesecc8`; `tail -50 /var/log/sap_health_check.log` |
+| Mailing list edit not reflected in UI | Cached browser state | Hard-reload; verify `mailing_lists.json` `updated_at` advanced in `doc_pages` |
+| New server card breaks layout | `.status-grid` `auto-fit minmax(280px, 1fr)` doesn't balance 7 cards | Use explicit `grid-template-columns` or split into two grids |
 
 ---
 
-## Cross-references
+## Individual system cockpits
 
-- **Per-server cockpits**: `saprouter`, `sq1-license`, `sap-cds`, `bwextractors`, plus the per-system docs in the SAP Skills Portal
-- **Backend / portal infra**: `SAP_Skills:sap-skills-portal` — the umbrella skill for `gcs_explorer_server.py`, `doc_pages`, `vault_secrets`, the mailing-list mechanics, and the systemd services
-- **Backups + rotation**: `backint`, `saporaclebackup`
-- **Memory hooks**:
-  - `feedback_never_modify_production_before_github` — never write directly to `/usr/sap/sap_skills/docs/` without the doc_pages step
-  - `feedback_portal_post_handlers_empty_reply` — adding a new `/api/...` POST handler can mask itself behind a NameError; always test
-  - `project_otc_multilang_20260428` — example of the "translate + upsert + scp" workflow used for the per-server cockpit pages
+Each server card on the Management Cockpit links to a dedicated per-system cockpit. Those pages have their own documentation and skills — don't edit them here:
+
+| Server | Cockpit HTML | Skill |
+|---|---|---|
+| `sapidess4` (S/4HANA) | `SAP_S4HANA_2023.html` + `_Guide.html` | `SAP_Skills:sap-skills-portal` |
+| `sapidesecc8` (ECC Oracle) | `SAP_ECC6_EHP8.html` + `_Guide.html` | `SAP_Skills:sap-skills-portal` |
+| `sap-sql-ides` (ECC SQL Server) | `SAP_ECC6_SQ1.html` + `_Guide.html` | `sq1-license` |
+| `saprouter` | `SAP_SAPRouter.html` + `SAP_SAPRouter_Documentation.html` | `saprouter` |
+| `saphvrhub` | `SAP_HVRHub.html` + `_Documentation.html` | — |
+| SSH Tunnel | `SAP_SSHTunnel.html` + `_Guide.html` | — |
+
+---
+
+## Related
+
+| Resource | Link |
+|---|---|
+| SAP Skills Portal | [sapidesecc8.fivetran-internal-sales.com/sap_skills](https://sapidesecc8.fivetran-internal-sales.com/sap_skills/) |
+| SAP Skills Portal repo | [fivetran/SAPSkillsPortal](https://github.com/fivetran/SAPSkillsPortal) |
+| Service Monitor page | `/sap_skills/docs/SAP_Monitoring.html` |
+
+---
+
+## Contacts
+
+**Antonio Carbone** and **Richard Brouwer** — Fivetran SAP Specialists.
